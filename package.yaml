@@ -1,0 +1,48 @@
+name:                intensional-functions-plume
+version:             0.1.0.0
+github:              "zepalmer/intensional-functions-plume"
+license:             BSD3
+author:              ["Zachary Palmer", "Earl Wu"]
+maintainer:          "zep_github@bahj.com"
+copyright:           "2021 Zachary Palmer, Earl Wu"
+
+extra-source-files:
+- README.md
+- ChangeLog.md
+
+# Metadata used when publishing your package
+synopsis:            An implementation of the Plume program analysis using intensional algebraic structures.
+# category:            Web
+
+# To avoid duplicated efforts in documentation and dealing with the
+# complications of embedding Haddock markup inside cabal files, it is
+# common to point users to the README.md file.
+description:         Please see the README on GitHub at <https://github.com/zepalmer/intensional-functions-plume#readme>
+
+dependencies:
+- base >= 4.7 && < 5
+
+library:
+  source-dirs: src
+
+executables:
+  intensional-functions-plume-exe:
+    main:                Main.hs
+    source-dirs:         app
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - intensional-functions-plume
+
+tests:
+  intensional-functions-plume-test:
+    main:                Spec.hs
+    source-dirs:         test
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - intensional-functions-plume

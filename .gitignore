@@ -1,0 +1,9 @@
+# Stack .gitignore
+.stack-work/
+*~
+
+# Created by hpack
+*.cabal
+
+# Temp files
+*.lock
