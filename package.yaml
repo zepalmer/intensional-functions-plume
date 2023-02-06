@@ -4,7 +4,7 @@ github:              "zepalmer/intensional-functions-plume"
 license:             BSD3
 author:              ["Zachary Palmer", "Earl Wu"]
 maintainer:          "zep_github@bahj.com"
-copyright:           "2021 Zachary Palmer, Earl Wu"
+copyright:           "2021-2022 Zachary Palmer, Earl Wu"
 
 extra-source-files:
 - README.md
@@ -21,6 +21,21 @@ description:         Please see the README on GitHub at <https://github.com/zepa
 
 dependencies:
 - base >= 4.7 && < 5
+- containers
+- more-containers
+- array
+- bytestring
+- dequeue
+- deepseq
+- directory
+- filepath
+- intensional-algebraic-structures
+- intensional-functions-closure-engine
+- mtl >= 2.2.2
+- tasty
+- tasty-hunit
+- time >= 1.8.0.2
+- transformers >= 0.5.6.2
 
 library:
   source-dirs: src

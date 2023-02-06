@@ -1,4 +1,2 @@
-# `intensional-functions-plume`
-
-This package contains an implementation of the Plume program analysis using
-intensional algebraic structures.
+# haskell-odefa
+Interpreter for the language odefa and the Plume Analysis, written in Haskell

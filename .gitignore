@@ -1,9 +1,8 @@
-# Stack .gitignore
 .stack-work/
+odefa.cabal
 *~
-
-# Created by hpack
-*.cabal
-
-# Temp files
 *.lock
+output.txt
+.vsls.json
+toploop
+cfg-*.pdf

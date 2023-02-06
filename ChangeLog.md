@@ -1,3 +1,3 @@
-# Changelog for intensional-functions-plume
+# Changelog for helloworld
 
 ## Unreleased changes
