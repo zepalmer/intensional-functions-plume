@@ -99,14 +99,6 @@ indexIsActiveNode = \%Ord fact ->
     CFGNodeActiveFact node -> Just (node, ())
     _ -> Nothing
 
--- TODO: Consider: are we using this?
-indexAllLookupResults ::
-    ICE.IndexingFunction (PlumeFact context) () (Lookup context, AbstractValue)
-indexAllLookupResults = \%Ord fact ->
-  case fact of
-    LookupResultFact lookup result -> Just ((), (lookup, result))
-    _ -> Nothing
-
 indexLookupResultsByLookup ::
     ICE.IndexingFunction (PlumeFact context) (Lookup context) AbstractValue
 indexLookupResultsByLookup = \%Ord fact ->
@@ -315,7 +307,6 @@ createInitialAnalysis emptyCtx expr =
     . addIndex indexAllEdges
     . addIndex indexAllActiveNodes
     . addIndex indexIsActiveNode
-    . addIndex indexAllLookupResults
     . addIndex indexLookupResultsByLookup
     . addIndex indexAllCallSites
     . addIndex indexAllConditionalSites
