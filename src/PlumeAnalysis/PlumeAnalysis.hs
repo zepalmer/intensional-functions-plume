@@ -209,17 +209,15 @@ wireM context siteNode func argVar bindVar =
     ICE.addIntermediateFacts $ Set.toList $
         Set.map CFGEdgeFact bodyEdges
     ICE.addIntermediateComputation $
-        (\%Ord () -> intensional Ord do
-        pred <- ICE.getIndexedFact indexPredecessors siteNode
-        itsPure %@ Set.singleton
+        intensional Ord do
+          pred <- ICE.getIndexedFact indexPredecessors siteNode
+          itsPure %@ Set.singleton
             (CFGEdgeFact $ CFGEdge pred wireInNode)
-        )
     ICE.addIntermediateComputation $
-        (\%Ord () -> intensional Ord do
-        succ <- ICE.getIndexedFact indexSuccessors siteNode
-        itsPure %@ Set.singleton
+        intensional Ord do
+          succ <- ICE.getIndexedFact indexSuccessors siteNode
+          itsPure %@ Set.singleton
             (CFGEdgeFact $ CFGEdge wireOutNode succ)
-        )
     itsPure %@ Set.empty
 
 {-| The closure engine computations defining Plume abstract evaluation rules.
@@ -452,8 +450,7 @@ cfgClosureStep analysis =
         List.concatMap
           (\fact ->
             case fact of
-              CFGEdgeFact edge ->
-                computationForEdge edge
+              CFGEdgeFact edge -> computationForEdge edge
               _ -> []
           )
           (Set.toList newFacts)
@@ -572,3 +569,16 @@ contextualValuesOfVariable x acl ctx analysis =
           x acl ctx Set.empty Set.empty analysis
   in
   (Set.fromList valLst, analysis')
+
+{-| Retrieves from a Plume analysis all of its CFG edges. -}
+getAllEdges :: (Ord context)
+            => PlumeAnalysis context -> Set (CFGNode context, CFGNode context)
+getAllEdges analysis =
+    ICE.facts (plumeEngine analysis)
+    & Set.toList
+    & Maybe.mapMaybe
+        (\fact -> case fact of
+            CFGEdgeFact (CFGEdge n1 n2) -> Just (n1,n2)
+            _ -> Nothing
+        )
+    & Set.fromList

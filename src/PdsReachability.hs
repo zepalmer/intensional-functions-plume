@@ -15,6 +15,7 @@ module PdsReachability
 , R.getReachableNodes
 , R.closureStep
 , R.isClosed
+, R.pop
 -- TODO: more
 ) where
 

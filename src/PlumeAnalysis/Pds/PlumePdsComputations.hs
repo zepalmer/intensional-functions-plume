@@ -1,41 +1,117 @@
+{-# LANGUAGE IntensionalFunctions #-}
 {-# LANGUAGE TupleSections #-}
 
 module PlumeAnalysis.Pds.PlumePdsComputations where
 
 import AST.AbstractAst
+import AST.Ast
 import qualified PlumeAnalysis.Context as C
 import qualified PdsReachability
+import PdsReachability (pop, Path(..), StackAction(..))
 import PlumeAnalysis.Pds.PlumePdsStructureTypes
 import PlumeAnalysis.PlumeSpecification
 import PlumeAnalysis.Types.PlumeGraph
 
+import Control.Intensional.Applicative
+import Control.Intensional.MonadPlus
+import Control.Intensional.Runtime
 import Data.Function ((&))
 import qualified Data.List as List
 import qualified Data.Set as Set
 import qualified Data.Map as Map
 import qualified Data.Maybe as Maybe
 
--- Function wiring
-ruleFunctionTopParameterVariable ::
+type CFGEdgeComputationFunction context =
     CFGNode context -> CFGNode context
  -> Maybe (PdsReachability.PDRM (PlumePds context)
            ( PdsReachability.Path (PlumePds context)
            , PdsState context
            )
           )
-ruleFunctionTopParameterVariable n1 n0 =
-  undefined -- TODO
 
-computationForEdge :: CFGEdge context
-                   -> [( PdsState context
-                       , PdsReachability.PDRM (PlumePds context)
-                         ( PdsReachability.Path (PlumePds context)
-                         , PdsState context
-                         )
-                       )
-                      ]
+-- Function wiring -------------------------------------------------------------
+
+ruleFunctionEnterParameter :: forall context.
+       ( Typeable context, Ord context, Show context
+       , IntensionalMonadPlusZeroC (PdsReachability.PDRM (PlumePds context)) ()
+       , IntensionalMonadPlusZeroC (PdsReachability.PDRM (PlumePds context))
+            (Path (PlumePds context), PdsState context)
+       )
+    => CFGEdgeComputationFunction context
+ruleFunctionEnterParameter n1 n0 = do
+  (CFGNode (EnterClause x x' cls) context) <- Just n1
+  pure $ intensional Ord do
+    stackElement <- pop
+    case stackElement of
+      LookupVar xlookup patsp patsn ->
+        intensional Ord do
+          () <- itsGuard %$ xlookup == x
+          itsPure %@ ( Path [Push $ LookupVar x' patsp patsn]
+                     , ProgramPointState n1
+                     )
+      _ -> itsMzero
+
+ruleFunctionEnterNonLocal :: forall context.
+       ( Typeable context, Ord context, Show context
+       , IntensionalMonadPlusZeroC (PdsReachability.PDRM (PlumePds context)) ()
+       )
+    => CFGEdgeComputationFunction context
+ruleFunctionEnterNonLocal n1 n0 = do
+  (CFGNode (EnterClause x x' cls@(Clause _ (ApplBody xf _ _)))
+        context) <- Just n1
+  pure $ intensional Ord do
+    stackElement <- pop
+    case stackElement of
+      LookupVar xlookup patsp patsn ->
+        intensional Ord do
+          () <- itsGuard %$ xlookup /= x
+          itsPure %@ ( Path [ Push $ LookupVar xf Set.empty Set.empty
+                            , Push $ LookupVar xlookup patsp patsn
+                            ]
+                     , ProgramPointState n1
+                     )
+      _ -> itsMzero
+
+ruleFunctionExit :: forall context.
+       ( Typeable context, Ord context, Show context
+       , IntensionalMonadPlusZeroC (PdsReachability.PDRM (PlumePds context)) ()
+       , IntensionalMonadPlusZeroC (PdsReachability.PDRM (PlumePds context))
+            (Path (PlumePds context), PdsState context)
+       )
+    => CFGEdgeComputationFunction context
+ruleFunctionExit n1 n0 = do
+  (CFGNode (ExitClause x x' cls) context) <- Just n1
+  pure $ intensional Ord do
+    stackElement <- pop
+    case stackElement of
+      LookupVar xlookup patsp patsn ->
+        intensional Ord do
+          () <- itsGuard %$ xlookup == x
+          itsPure %@ ( Path [Push $ LookupVar x' patsp patsn]
+                     , ProgramPointState n1
+                     )
+      _ -> itsMzero
+
+-- Aggregate computations ------------------------------------------------------
+
+computationForEdge :: forall context.
+       ( Typeable context, Ord context, Show context
+       , IntensionalMonadPlusZeroC (PdsReachability.PDRM (PlumePds context)) ()
+       , IntensionalMonadPlusZeroC (PdsReachability.PDRM (PlumePds context))
+            (Path (PlumePds context), PdsState context)
+       )
+    => CFGEdge context
+    -> [( PdsState context
+        , PdsReachability.PDRM (PlumePds context)
+          ( PdsReachability.Path (PlumePds context)
+          , PdsState context
+          )
+        )
+       ]
 computationForEdge (CFGEdge n1 n0) =
-  let rules = [ ruleFunctionTopParameterVariable
+  -- TODO: remaining rules
+  let rules = [ ruleFunctionEnterParameter
+              , ruleFunctionExit
               ]
   in
   rules
@@ -44,58 +120,3 @@ computationForEdge (CFGEdge n1 n0) =
         let maybeComputation = rule n1 n0 in
         fmap (ProgramPointState n0,) maybeComputation
       )
-  -- TODO: port work from PdsEdgeFunctions to here
-
-
-
--- Old notes below:
-{-
-let edge = CFGNode n1 n0 in
-let computation =
-      case n1 of
-        CFGNode (EnterClause x x' (Clause _ (ApplBody _ x3'' _))) _ ->
-          intensional Ord do
-            LookupVar x'' patsp patsn <- pop
-            itsGuard (x' == x'')
-            itsPure $ ( Path $ [Push $ LookupVar x1 patsp patsn]
-                      , ProgramPointState n1
-                      )
-in
-let pds' = PdsReachability.addPathComputation
-            (ProgramPointState n0)
-            computation
-            pds
-in
-...
-
-
-
-
-
-
-
-               , case n1 of
-                    CFGNode (EnterClause x x' c) _ ->
-                      case c of
-                        -- NOTE: ignoring call site annotations
-                        -- as none apply to Plume lookup.
-                        Clause _ (ApplBody _ x3'' _) ->
-                          if not (x' == x3'') then undefined
-                          else
-                            return (VariableAliasing x x', ProgramPointState n1)
-                        otherwise -> mzero
-                    otherwise -> mzero
-
-case element of
-        LookupVar x' patsp patsn ->
-          if (x' == x2)
-          then return $ Path $ [Push $ LookupVar x1 patsp patsn]
-          else mzero
-        otherwise -> mzero
-
-
-
-
-
-
--}

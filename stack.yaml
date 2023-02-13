@@ -15,5 +15,5 @@ extra-deps:
   - git: git.bahj.com:intensional-functions-lib
     commit: 0054961c2209a51d0b6815a5eec839b0291cf93a
   - git: git.bahj.com:intensional-functions-closure-engine
-    commit: 462c5861e6fa62743180bb767ba90d2f3c6517de
+    commit: b233af828121dc5f54fa0b1e4d5dbd0b46e8e44d
   - dequeue-0.1.12@sha256:547c2a71819dca0ae1bf7c15fb290b39f80d5d9a6f9985a06a1cb8645b578df2,855

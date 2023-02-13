@@ -93,13 +93,13 @@ abstractUnaryOperation unop arg =
     (UnaOpBoolNot, AbsValueBool b) -> Just [AbsValueBool $ not b]
     otherwise -> Nothing
 
-cfgToDotString :: forall c. (C.Context c) => CFG c -> String
-cfgToDotString cfg =
-  let allEdges = allCFGEdges cfg in
+cfgToDotString :: forall c. (C.Context c)
+               => S.Set (CFGNode c, CFGNode c) -> String
+cfgToDotString edges =
   let startingStr = "digraph G { " in
-  let foldFun acc (CFGEdge n1 n2) =
+  let foldFun acc (n1, n2) =
         acc ++ "\"" ++ (ppCFGNode n1) ++ "\" -> " ++ "\"" ++ (ppCFGNode n2) ++ "\";"
   in
-  let edgesStr = S.foldl foldFun startingStr allEdges in
+  let edgesStr = S.foldl foldFun startingStr edges in
   let finalGraph = edgesStr ++ " }" in
   finalGraph

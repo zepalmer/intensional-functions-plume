@@ -73,13 +73,13 @@ newtype MainMonad x = MainMonad (StateT Integer IO x)
 instance ToploopMonad MainMonad where
   -- getCallbacks = MainMonad $ pure $ pure $ stdoutCallbacks
   getCallbacks = MainMonad $ pure $ stdoutCallbacks
-  
+
   -- MainMonad $ State $ Integer -> (IO x, Integer) -> MainMonad $ State $ Integer -> (IO (x, Integer), Integer)
   --time :: MainMonad a -> MainMonad (a, Integer)
   -- time m = MainMonad $ state $ (\s ->
   --   let MainMonad stateVal = m in
   --   let (ioA, s') = runState stateVal s in
-  --   let (ioRes) = 
+  --   let (ioRes) =
   --         do
   --           startTime <- getSystemTime
   --           a <- ioA
@@ -91,7 +91,7 @@ instance ToploopMonad MainMonad where
   --           return (a, endMs - startMs)
   --   in (ioRes, s')
   --   )
-  time m = 
+  time m =
     do
       startTime <- MainMonad $ lift $ getSystemTime
       a <- m
@@ -116,18 +116,18 @@ stdoutIllformednessesCallback ills = do
   mainPutStrLn "Provided expression is ill-formed:\n"
   forM_ ills (\ill -> mainPutStrLn $ ("  " ++ show ill))
 
-stdoutVariableAnalysisCallback :: 
-  LookupVar -> 
-  GraphPosition -> 
+stdoutVariableAnalysisCallback ::
+  LookupVar ->
+  GraphPosition ->
   UserContext ->
-  S.Set AbsFilteredVal -> 
+  S.Set AbsFilteredVal ->
   String ->
   MainMonad ()
 stdoutVariableAnalysisCallback varName siteName userContext values analysisName =
   let (LUVar varStr) = varName in
   do
     mainPutStrLn (analysisName ++ ": ")
-    mainPutStr ("Lookup of variable " ++ varStr)    
+    mainPutStr ("Lookup of variable " ++ varStr)
     case siteName of
       ProgramPoint siteNameStr ->
         mainPutStr (" from clause " ++ siteNameStr)
@@ -136,7 +136,7 @@ stdoutVariableAnalysisCallback varName siteName userContext values analysisName 
       [] -> return $ ()
       contextList -> do
         mainPutStr " in context "
-        let loop = \ss -> 
+        let loop = \ss ->
               case ss of
                 [] -> mainPutStr "[]"
                 LUVar s : [] -> mainPutStr s
@@ -155,10 +155,10 @@ stdoutErrorsCallback errors =
 
 stdoutEvaluationResultCallback :: InterpVar -> Environment -> MainMonad ()
 stdoutEvaluationResultCallback v env =
-  mainPutStrLn $ show v ++ " where " ++ showEnvironment env 
+  mainPutStrLn $ show v ++ " where " ++ showEnvironment env
 
 stdoutEvaluationFailedCallback :: String -> MainMonad ()
-stdoutEvaluationFailedCallback msg = 
+stdoutEvaluationFailedCallback msg =
   mainPutStrLn $ "Evaluation failed: " ++ msg
 
 stdoutEvaluationDisabledCallback :: () -> MainMonad ()
@@ -166,13 +166,13 @@ stdoutEvaluationDisabledCallback () =
   mainPutStrLn "Evaluation disabled"
 
 stdoutAnalysisTimeReportCallback :: Integer -> MainMonad ()
-stdoutAnalysisTimeReportCallback time = 
-  mainPutStrLn $ "Analysis took " ++ show time ++ " ms." 
+stdoutAnalysisTimeReportCallback time =
+  mainPutStrLn $ "Analysis took " ++ show time ++ " ms."
 
 stdoutCFGReportCallback :: SomePlumeAnalysis -> MainMonad ()
-stdoutCFGReportCallback wrappedAnalysis = 
+stdoutCFGReportCallback wrappedAnalysis =
   withSomePlumeAnalysis wrappedAnalysis $ \unwrappedAnalysis ->
-    let dotstr = cfgToDotString (plumeGraph unwrappedAnalysis) in
+    let dotstr = cfgToDotString (getAllEdges unwrappedAnalysis) in
     MainMonad $ do
       n <- get
       put $ n + 1
@@ -180,12 +180,12 @@ stdoutCFGReportCallback wrappedAnalysis =
       lift $ writeFile filename dotstr
 
 handleExpr ::  Configuration -> ConcreteExpr -> IO Result
-handleExpr conf expr = 
+handleExpr conf expr =
   -- Make call to the handleExpression in Toploop
   -- Note that the toploop will print things for us if we give it the right
   -- callbacks
     flip runMainMonad 0 $ handleExpression stdoutCallbacks conf expr
-    
+
 main :: IO ()
 main =
   do
@@ -197,7 +197,7 @@ main =
         let tokenList = alexScanTokens text
         putStrLn (show tokenList)
         (pure $ parseProgram tokenList) >>= (handleExpr configuration)
-        return () 
+        return ()
       [filename] -> do -- read from file
         (parseFile filename) >>= (handleExpr configuration)
         return ()

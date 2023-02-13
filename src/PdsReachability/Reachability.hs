@@ -11,9 +11,11 @@
 module PdsReachability.Reachability where
 
 import AST.Ast
+import Control.Intensional.Alternative
 import Control.Intensional.Applicative
 import Control.Intensional.Functor
 import Control.Intensional.Monad
+import Control.Intensional.MonadPlus
 import Control.Intensional.Monad.Identity
 import Control.Intensional.Monad.Trans
 import Control.Intensional.Monad.Trans.Coroutine
@@ -300,6 +302,9 @@ type PDRMInner spec =
   )
 newtype PDRM spec a = PDRM (PDRMInner spec a)
 
+deriving instance Eq (PDRM spec a)
+deriving instance Ord (PDRM spec a)
+
 instance (Typeable spec) => IntensionalFunctor (PDRM spec) where
   type IntensionalFunctorCF (PDRM spec) = Ord
   type IntensionalFunctorMapC (PDRM spec) a b =
@@ -322,6 +327,22 @@ instance (Typeable spec) => IntensionalMonad (PDRM spec) where
       a <- ma
       let PDRM mb = amb %@ a
       mb
+
+instance (Typeable spec) => IntensionalAlternative (PDRM spec) where
+  type IntensionalAlternativeEmptyC (PDRM spec) a =
+    (IntensionalAlternativeEmptyC (PDRMInner spec) a)
+  type IntensionalAlternativeChoiceC (PDRM spec) a =
+    (IntensionalAlternativeChoiceC (PDRMInner spec) a)
+  itsEmpty = PDRM $ itsEmpty
+  (%<|>) = \%%Ord (PDRM a) (PDRM b) -> PDRM $ (%<|>) %@% (a, b)
+
+instance (Typeable spec) => IntensionalMonadPlus (PDRM spec) where
+  type IntensionalMonadPlusZeroC (PDRM spec) a =
+        (IntensionalMonadPlusZeroC (PDRMInner spec) a)
+  type IntensionalMonadPlusPlusC (PDRM spec) a =
+        (IntensionalMonadPlusPlusC (PDRMInner spec) a)
+  itsMzero = PDRM $ itsMzero
+  itsMplus = \%%Ord (PDRM a) (PDRM b) -> PDRM $ itsMplus %@% (a, b)
 
 pop :: forall spec itsM.
        ( Spec spec
@@ -402,8 +423,6 @@ addEdgeFunction maybeNodeFilter edgeFunction analysis =
           itsPure %@ facts
   in
   analysis' & updateEngine (addComputation computation)
-
--- TODO: update code below here
 
 -- USER
 addQuestion :: (Spec a) => Question a -> Analysis a -> Analysis a
