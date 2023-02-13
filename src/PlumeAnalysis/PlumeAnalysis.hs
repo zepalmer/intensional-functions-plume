@@ -37,7 +37,7 @@ import qualified Data.Set as Set
 -- Internal Data Types ---------------------------------------------------------
 
 data Lookup context
-  = Lookup AbstractVar context (Set Pattern) (Set Pattern)
+  = Lookup AbstractVar AbstractCls context (Set Pattern) (Set Pattern)
   deriving (Eq, Ord, Show)
 
 data PlumeFact context
@@ -136,14 +136,14 @@ indexAllCallSites = \%Ord fact ->
 
 indexAllConditionalSites ::
     ICE.IndexingFunction (PlumeFact context) ()
-        ( AbstractVar, AbstractVar, Pattern, AbstractFun, AbstractFun
-        , context, CFGNode context)
+        ( AbstractCls, AbstractVar, AbstractVar, Pattern, AbstractFun
+        , AbstractFun , context, CFGNode context)
 indexAllConditionalSites = \%Ord fact ->
   case fact of
     CFGNodeFact node@(CFGNode
-      (UnannotatedClause (Clause x1 (ConditionalBody x2 p f1 f2)))
+      (UnannotatedClause cls@(Clause x1 (ConditionalBody x2 p f1 f2)))
       context ) ->
-        Just ((), (x1, x2, p, f1, f2, context, node))
+        Just ((), (cls, x1, x2, p, f1, f2, context, node))
     _ -> Nothing
 
 -- Helpers for manipulating analysis structures --------------------------------
@@ -243,13 +243,13 @@ abstractEvaluationRules =
         (cls,x1,x2,x3,annot,context,cfgNode) <-
             ICE.getIndexedFact indexAllCallSites ()
         () <- ICE.getIndexedFact indexIsActiveNode cfgNode
-        let x2lookup = Lookup x2 context Set.empty Set.empty
+        let x2lookup = Lookup x2 cls context Set.empty Set.empty
         ICE.addIntermediateFact $ PlumeNeedsLookup x2lookup
         x2val <- ICE.getIndexedFact indexLookupResultsByLookup x2lookup
         case x2val of
           AbsValueFunction x2funval@(FunctionValue (Var x4id) body) ->
             intensional Ord do
-              let x3lookup = Lookup x3 context Set.empty Set.empty
+              let x3lookup = Lookup x3 cls context Set.empty Set.empty
               ICE.addIntermediateFact $ PlumeNeedsLookup x3lookup
               () <- ICE.getIndexedFact indexLookupResultExists x3lookup
               let isContextual =
@@ -267,24 +267,24 @@ abstractEvaluationRules =
       )
     , -- Conditional True
       (intensional Ord do
-        (x1,x2,p,thenFn,elseFn,context,cfgNode) <-
+        (cls,x1,x2,p,thenFn,elseFn,context,cfgNode) <-
             ICE.getIndexedFact indexAllConditionalSites ()
         () <- ICE.getIndexedFact indexIsActiveNode cfgNode
         let (posPatSet,negPatSet,branchFn) =
               (Set.singleton p, Set.empty, thenFn)
-        let lookup = Lookup x2 context posPatSet negPatSet
+        let lookup = Lookup x2 cls context posPatSet negPatSet
         () <- ICE.addIntermediateFact $ PlumeNeedsLookup lookup
         () <- ICE.getIndexedFact indexLookupResultExists lookup
         wireM context cfgNode branchFn x2 x1
       )
     , -- Conditional False
       (intensional Ord do
-        (x1,x2,p,thenFn,elseFn,context,cfgNode) <-
+        (cls,x1,x2,p,thenFn,elseFn,context,cfgNode) <-
             ICE.getIndexedFact indexAllConditionalSites ()
         () <- ICE.getIndexedFact indexIsActiveNode cfgNode
         let (posPatSet,negPatSet,branchFn) =
               (Set.empty, Set.singleton p, elseFn)
-        let lookup = Lookup x2 context posPatSet negPatSet
+        let lookup = Lookup x2 cls context posPatSet negPatSet
         () <- ICE.addIntermediateFact $ PlumeNeedsLookup lookup
         () <- ICE.getIndexedFact indexLookupResultExists lookup
         wireM context cfgNode branchFn x2 x1
@@ -425,12 +425,13 @@ pdsClosure analysis =
         & Maybe.mapMaybe
             (\(PdsReachability.Question startNode actions, answerNode) ->
               case (startNode, actions, answerNode) of
-                    ( ProgramPointState (CFGNode _ context),
+                    ( ProgramPointState
+                        (CFGNode (UnannotatedClause acl) context),
                       [ PdsReachability.Push BottomOfStack
                       , PdsReachability.Push (LookupVar x patsp patsn)
                       ],
                       ResultState (AbsFilteredVal value _ _)) ->
-                        let lookup = Lookup x context patsp patsn in
+                        let lookup = Lookup x acl context patsp patsn in
                         Just $ LookupResultFact lookup value
                     _ ->
                         Nothing
@@ -458,24 +459,45 @@ cfgClosureStep analysis =
                             ]
       newPdsComputations =
         List.concatMap
-          (\fact -> case fact of
-                      CFGEdgeFact edge -> computationForEdge edge
-                      _ -> []
+          (\fact ->
+            case fact of
+              CFGEdgeFact edge ->
+                computationForEdge edge
+              _ -> []
           )
-          newFacts
+          (Set.toList newFacts)
+  in
+  let newPdsLookups :: [Lookup context]
+      newPdsLookups =
+        Maybe.mapMaybe
+          (\fact ->
+            case fact of
+              PlumeNeedsLookup lookup -> Just lookup
+              _ -> Nothing
+          )
+          (Set.toList newFacts)
   in
   let pds' =
         List.foldl
           (\pds (startNode,pathComputation) ->
             PdsReachability.addPathComputation startNode pathComputation pds
           )
-          (pdsEngine analysis)
-          newPdsComputations
+          (pdsEngine analysis) newPdsComputations
   in
-  analysis
-    { plumeEngine = plume'
-    , pdsEngine = pds'
-    }
+  let analysis' =
+        analysis
+          { plumeEngine = plume'
+          , pdsEngine = pds'
+          }
+  in
+  let analysis'' =
+        List.foldl
+          (\pds (Lookup x acl ctx patsp patsn) ->
+            prepareQuestion x (UnannotatedClause acl) ctx patsp patsn pds
+          )
+          analysis' newPdsLookups
+  in
+  analysis''
 
 {-| Performs a single Plume closure step.  This performs a single step of CFG
     closure and then fully closes over the underlying PDS.
