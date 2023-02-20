@@ -182,7 +182,7 @@ ruleFunctionExit n1 n0 = do
     case stackElement of
       LookupVar xlookup patsp patsn ->
         intensional Ord do
-          () <- itsGuard %$ xlookup == x
+          itsGuard %$ xlookup == x
           itsPure %@ ( Path [Push $ LookupVar x' patsp patsn]
                      , ProgramPointState n1 )
       _ -> itsMzero
@@ -331,6 +331,188 @@ recordProjectionStop n1 n0 =
             _ -> itsMzero
       _ -> itsMzero
 
+-- Filter validation -----------------------------------------------------------
+
+filterImmediate :: forall context.
+       (CFGEdgeComputationFunctionConstraints context)
+    => CFGEdgeComputationFunction context
+filterImmediate n1 n0 = do
+  CFGNode (UnannotatedClause (Clause x (ValueBody v))) _ <- Just n1
+  patsLegal <- immediatelyMatchedBy v
+  pure $ intensional Ord do
+    stackElement <- pop
+    case stackElement of
+      LookupVar xlookup patsp patsn ->
+        intensional Ord do
+          itsGuard %$ xlookup == x
+          let patCheck =
+                List.all (\pat -> not $ Set.member pat patsn)
+                         [FunPattern, AnyPattern]
+          itsGuard %$ (patsp `Set.isSubsetOf` patsLegal) &&
+                      Set.disjoint patsn patsLegal && patCheck
+          let absFilteredVal = AbsFilteredVal v Set.empty Set.empty
+          itsPure %@ ( Path [Push $ ContinuationValue absFilteredVal]
+                     , ProgramPointState n1 )
+      _ -> itsMzero
+
+filterRecord :: forall context.
+       (CFGEdgeComputationFunctionConstraints context)
+    => CFGEdgeComputationFunction context
+filterRecord n1 n0 = do
+  CFGNode (UnannotatedClause (Clause x (ValueBody v))) _ <- Just n1
+  AbsValueRecord r@(RecordValue m) <- Just v
+  pure $ intensional Ord do
+    stackElement <- pop
+    case stackElement of
+      LookupVar xlookup patsp patsn ->
+        intensional Ord do
+          itsGuard %$ xlookup == x
+          let patCheck =
+                List.all (\pat -> not $ Set.member pat patsn)
+                  [RecordPattern Map.empty, AnyPattern]
+          itsGuard %$ isRecordPatternSet patsp && patCheck
+          let patsn' = negativePatternSetSelection r patsn
+          let patternSetLabels = labelsInPatternSet patsp
+          let recordLabels = labelsInRecord r
+          itsGuard %$ patternSetLabels `Set.isSubsetOf` recordLabels
+          let makeK'' l =
+                let x'' = (Map.!) m l in
+                [ Push $ LookupVar x'' (patternSetProjection patsp l)
+                                       (patternSetProjection patsn' l)
+                , Push $ Jump n1
+                ]
+          let firstPushes =
+                [ Push $ ContinuationValue $ AbsFilteredVal v patsp patsn'
+                , Push $ Jump n1
+                ]
+          let allPushes =
+                recordLabels
+                & Set.toList
+                & List.map makeK''
+                & List.concat
+                & (++) firstPushes
+          itsPure %@ (Path allPushes, ProgramPointState n1)
+      _ -> itsMzero
+
+-- Binary operators ------------------------------------------------------------
+
+binaryOperationStart :: forall context.
+       (CFGEdgeComputationFunctionConstraints context)
+    => CFGEdgeComputationFunction context
+binaryOperationStart n1 n0 = do
+  CFGNode (UnannotatedClause
+              (Clause x1 (BinaryOperationBody x2 _ x3))) _ <- Just n1
+  pure $ intensional Ord do
+    stackElement <- pop
+    case stackElement of
+      LookupVar xlookup _ _ ->
+        intensional Ord do
+          itsGuard %$ xlookup == x1
+          let k1'' = [ Capture $ CaptureSize 5
+                     , LookupVar x2 Set.empty Set.empty]
+          let k2'' = [ Capture $ CaptureSize 2
+                     , LookupVar x3 Set.empty Set.empty
+                     , Jump n1 ]
+          let k3'' = [ BinaryOperation, Jump n0 ]
+          let k0 = [stackElement]
+          itsPure %@ ( Path $ List.map Push $ k0 ++ k3'' ++ k2'' ++ k1''
+                     , ProgramPointState n1 )
+      _ -> itsMzero
+
+binaryOperationEvaluation :: forall context.
+       (CFGEdgeComputationFunctionConstraints context)
+    => CFGEdgeComputationFunction context
+binaryOperationEvaluation n1 n0 = do
+  CFGNode (UnannotatedClause
+              (Clause x1 (BinaryOperationBody x2 op x3))) _ <- Just n1
+  pure $ intensional Ord do
+    stackElement1 <- pop
+    case stackElement1 of
+      BinaryOperation ->
+        intensional Ord do
+          stackElement2 <- pop
+          case stackElement2 of
+            ContinuationValue (AbsFilteredVal v2 patsp patsn) ->
+              intensional Ord do
+                itsGuard %$ Set.null patsp && Set.null patsn
+                stackElement3 <- pop
+                case stackElement3 of
+                  ContinuationValue (AbsFilteredVal v1 patsp' patsn') ->
+                    intensional Ord do
+                      itsGuard %$ Set.null patsp' && Set.null patsn'
+                      resultValues <- abstractBinaryOperation op v1 v2
+                      stackElement4 <- pop
+                      case stackElement4 of
+                        LookupVar xlookup patsplookup patsnlookup ->
+                          intensional Ord do
+                            itsGuard %$ x1 == xlookup
+                            immediatePatterns <- immediatelyMatchedBy resultValue
+                            itsGuard %$ patsp `Set.isSubsetOf` immediatePatterns
+                                     && Set.disjoint immediatePatterns patsn
+                            itsPure %@ ( Path [Push $ ContinuationValue $
+                                                  AbsFilteredVal resultValue
+                                                      Set.empty Set.empty]
+                                       , ProgramPointState n1
+                                       )
+                        _ -> itsMzero
+                  _ -> itsMzero
+            _ -> itsMzero
+      _ -> itsMzero
+
+unaryOperationStart :: forall context.
+       (CFGEdgeComputationFunctionConstraints context)
+    => CFGEdgeComputationFunction context
+unaryOperationStart n1 n0 = do
+  CFGNode (UnannotatedClause
+              (Clause x1 (UnaryOperationBody _ x2))) _ <- Just n1
+  pure $ intensional Ord do
+    stackElement <- pop
+    case stackElement of
+      LookupVar xlookup _ _ ->
+        intensional Ord do
+          itsGuard %$ xlookup == x1
+          let k1'' = [ Capture $ CaptureSize 2
+                     , LookupVar x2 Set.empty Set.empty ]
+          let k2'' = [ UnaryOperation, Jump n0 ]
+          let k0 = [stackElement]
+          itsPure %@ ( Path $ List.map Push $ k0 ++ k2'' ++ k1''
+                     , ProgramPointState n1 )
+      _ -> itsMzero
+
+unaryOperationEvaluation :: forall context.
+       (CFGEdgeComputationFunctionConstraints context)
+    => CFGEdgeComputationFunction context
+unaryOperationEvaluation n1 n0 = do
+  CFGNode (UnannotatedClause
+              (Clause x1 (UnaryOperationBody op x2))) _ <- Just n1
+  pure $ intensional Ord do
+    stackElement1 <- pop
+    case stackElement1 of
+      BinaryOperation ->
+        intensional Ord do
+          stackElement2 <- pop
+          case stackElement2 of
+            ContinuationValue (AbsFilteredVal v patsp patsn) ->
+              intensional Ord do
+                itsGuard %$ Set.null patsp && Set.null patsn
+                resultValues <- abstractUnaryOperation op v
+                stackElement3 <- pop
+                case stackElement3 of
+                  LookupVar xlookup patsplookup patsnlookup ->
+                    intensional Ord do
+                      itsGuard %$ x1 == xlookup
+                      immediatePatterns <- immediatelyMatchedBy resultValue
+                      itsGuard %$ patsp `Set.isSubsetOf` immediatePatterns
+                               && Set.disjoint immediatePatterns patsn
+                      itsPure %@ ( Path [Push $ ContinuationValue $
+                                            AbsFilteredVal resultValue
+                                                Set.empty Set.empty]
+                                 , ProgramPointState n1
+                                 )
+                  _ -> itsMzero
+            _ -> itsMzero
+      _ -> itsMzero
+
 -- Aggregate computations ------------------------------------------------------
 
 computationForEdge :: forall context.
@@ -361,6 +543,12 @@ computationForEdge (CFGEdge n1 n0) =
               , conditionalTopNonSubjectVariable
               , recordProjectionStart
               , recordProjectionStop
+              , filterImmediate
+              , filterRecord
+              , binaryOperationStart
+              , binaryOperationEvaluation
+              , unaryOperationStart
+              , unaryOperationEvaluation
               ]
   in
   rules
