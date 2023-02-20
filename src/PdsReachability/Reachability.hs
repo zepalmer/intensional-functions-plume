@@ -19,6 +19,7 @@ import Control.Intensional.MonadPlus
 import Control.Intensional.Monad.Identity
 import Control.Intensional.Monad.Trans
 import Control.Intensional.Monad.Trans.Coroutine
+import Control.Intensional.Monad.Trans.List
 import Control.Intensional.Monad.Trans.Maybe
 import Control.Intensional.Monad.Trans.State
 import Control.Intensional.Runtime
@@ -295,8 +296,8 @@ pathToFacts source (Path actions) destination =
 
 -- TODO: organize these declarations in some order that makes more sense
 type PDRMInner spec =
-  (MaybeT Ord
-    (StateT Ord (InternalNode spec)
+  (StateT Ord (InternalNode spec)
+    (ListT Ord
       (ICE.ComputationT (IntensionalIdentity Ord) (Fact spec))
     )
   )
@@ -357,11 +358,24 @@ pop :: forall spec itsM.
        )
     => PDRM spec (Element spec)
 pop = PDRM $ intensional Ord do
-  currentNode <- itsLift %@ itsGet
+  currentNode <- itsGet
   (prevNode, element) <- itsLift %@ (itsLift %@
                             ICE.getIndexedFact indexPushEdgesByDest currentNode)
-  itsLift %@ (itsSet %@ prevNode)
+  itsSet %@ prevNode
   itsPure %@ element
+
+pdrmMaybe :: forall spec a.
+             (Spec spec, Ord a, Typeable a)
+          => Maybe a -> PDRM spec a
+pdrmMaybe ma = case ma of
+  Just x -> itsPure %@ x
+  Nothing -> itsEmpty
+
+pdrmChoose :: forall spec a.
+              (Spec spec, Ord a, Typeable a)
+           => [a] -> PDRM spec a
+pdrmChoose items =
+  PDRM $ itsLift %$ liftList %$ items
 
 -- USER
 addPathComputation ::
@@ -370,20 +384,19 @@ addPathComputation ::
   => Node spec -> PDRM spec (Path spec, Node spec) -> Analysis spec
   -> Analysis spec
 addPathComputation source pdrComputation analysis =
-  let PDRM maybeStatefulComputation = pdrComputation in
-  let computationWithResult =
-        runStateT (runMaybeT $ maybeStatefulComputation) %@ UserNode source
+  let PDRM innerComputations = pdrComputation in
+  let computationsWithResultsM =
+        runListT $ ((runStateT $ innerComputations) %@ UserNode source)
   in
   let computation =
         intensional Ord do
           () <- ICE.getIndexedFact indexIsActiveNode (UserNode source)
-          (maybePathAndDestination, currentNode) <- computationWithResult
-          case maybePathAndDestination of
-            Just (path, destination) ->
-              let facts = pathToFacts currentNode path (UserNode destination) in
-              itsPure %@ facts
-            Nothing ->
-              itsPure %@ Set.empty
+          computationsWithResults <- computationsWithResultsM
+          factSets <- imListToList %$ itsFmap %@% (
+                  \%Ord ((path, destination), currentNode) ->
+                    pathToFacts currentNode path (UserNode destination)
+                  , computationsWithResults )
+          itsPure %@ List.foldr Set.union Set.empty factSets
   in
   analysis & updateEngine (addComputation computation)
 

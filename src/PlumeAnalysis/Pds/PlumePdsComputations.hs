@@ -10,7 +10,7 @@ import AST.Ast
 import AST.AstUtils
 import qualified PlumeAnalysis.Context as C
 import qualified PdsReachability
-import PdsReachability (pop, Path(..), StackAction(..))
+import PdsReachability (pop, pdrmMaybe, pdrmChoose, Path(..), StackAction(..))
 import PlumeAnalysis.Pds.PlumePdsStructureTypes
 import PlumeAnalysis.PlumeSpecification
 import PlumeAnalysis.Types.PlumeGraph
@@ -18,7 +18,9 @@ import PlumeAnalysis.Utils.PlumeUtils
 import Utils.Exception
 
 import Control.Exception
+import Control.Intensional.Functor
 import Control.Intensional.Applicative
+import Control.Intensional.Monad
 import Control.Intensional.MonadPlus
 import Control.Intensional.Runtime
 import Control.Monad
@@ -36,7 +38,7 @@ type CFGEdgeComputation context =
     )
 
 type CFGEdgeComputationFunction context =
-    CFGNode context -> CFGNode context -> Maybe (CFGEdgeComputation context)
+    CFGNode context -> CFGNode context -> [CFGEdgeComputation context]
 
 type CFGEdgeComputationFunctionConstraints context =
     ( Typeable context, Ord context, Show context )
@@ -68,7 +70,7 @@ alias :: forall context.
        (CFGEdgeComputationFunctionConstraints context)
     => CFGEdgeComputationFunction context
 alias n1 n0 = do
-  (CFGNode (UnannotatedClause (Clause x (VarBody x'))) _) <- Just n1
+  (CFGNode (UnannotatedClause (Clause x (VarBody x'))) _) <- [n1]
   pure $ intensional Ord do
     stackElement <- pop
     case stackElement of
@@ -83,7 +85,7 @@ skip :: forall context.
        (CFGEdgeComputationFunctionConstraints context)
     => CFGEdgeComputationFunction context
 skip n1 n0 = do
-  (CFGNode (UnannotatedClause (Clause x' _)) _) <- Just n1
+  (CFGNode (UnannotatedClause (Clause x' _)) _) <- [n1]
   pure $ intensional Ord do
     stackElement <- pop
     case stackElement of
@@ -144,7 +146,7 @@ ruleFunctionEnterParameter :: forall context.
        (CFGEdgeComputationFunctionConstraints context)
     => CFGEdgeComputationFunction context
 ruleFunctionEnterParameter n1 n0 = do
-  (CFGNode (EnterClause x x' (Clause _ (ApplBody {}))) _) <- Just n1
+  (CFGNode (EnterClause x x' (Clause _ (ApplBody {}))) _) <- [n1]
   pure $ intensional Ord do
     stackElement <- pop
     case stackElement of
@@ -159,7 +161,7 @@ ruleFunctionEnterNonLocal :: forall context.
        (CFGEdgeComputationFunctionConstraints context)
     => CFGEdgeComputationFunction context
 ruleFunctionEnterNonLocal n1 n0 = do
-  (CFGNode (EnterClause x x' cls@(Clause _ (ApplBody xf _ _))) _) <- Just n1
+  (CFGNode (EnterClause x x' cls@(Clause _ (ApplBody xf _ _))) _) <- [n1]
   pure $ intensional Ord do
     stackElement <- pop
     case stackElement of
@@ -176,7 +178,7 @@ ruleFunctionExit :: forall context.
        (CFGEdgeComputationFunctionConstraints context)
     => CFGEdgeComputationFunction context
 ruleFunctionExit n1 n0 = do
-  (CFGNode (ExitClause x x' (Clause _ (ApplBody {}))) _) <- Just n1
+  (CFGNode (ExitClause x x' (Clause _ (ApplBody {}))) _) <- [n1]
   pure $ intensional Ord do
     stackElement <- pop
     case stackElement of
@@ -193,8 +195,8 @@ conditionalTopSubjectPositive :: forall context.
        (CFGEdgeComputationFunctionConstraints context)
     => CFGEdgeComputationFunction context
 conditionalTopSubjectPositive n1 n0 = do
-  (CFGNode (EnterClause x' x1 cls) _) <- Just n1
-  Clause x2 (ConditionalBody _ p (FunctionValue x'_ _) _) <- Just cls
+  (CFGNode (EnterClause x' x1 cls) _) <- [n1]
+  Clause x2 (ConditionalBody _ p (FunctionValue x'_ _) _) <- [cls]
   guard $ x' == x'_
   pure $ intensional Ord do
     stackElement <- pop
@@ -210,8 +212,8 @@ conditionalTopSubjectNegative :: forall context.
        (CFGEdgeComputationFunctionConstraints context)
     => CFGEdgeComputationFunction context
 conditionalTopSubjectNegative n1 n0 = do
-  (CFGNode (EnterClause x' x1 cls) _) <- Just n1
-  Clause x2 (ConditionalBody _ p _ (FunctionValue x'_ _)) <- Just cls
+  (CFGNode (EnterClause x' x1 cls) _) <- [n1]
+  Clause x2 (ConditionalBody _ p _ (FunctionValue x'_ _)) <- [cls]
   guard $ x' == x'_
   pure $ intensional Ord do
     stackElement <- pop
@@ -227,8 +229,8 @@ conditionalBottomReturnPositive :: forall context.
        (CFGEdgeComputationFunctionConstraints context)
     => CFGEdgeComputationFunction context
 conditionalBottomReturnPositive n1 n0 = do
-  (CFGNode (ExitClause x x' cls) _) <- Just n1
-  Clause x2 (ConditionalBody x1 p (FunctionValue _ e) _) <- Just cls
+  (CFGNode (ExitClause x x' cls) _) <- [n1]
+  Clause x2 (ConditionalBody x1 p (FunctionValue _ e) _) <- [cls]
   guard $ x' == retv e
   pure $ intensional Ord do
     stackElement <- pop
@@ -247,8 +249,8 @@ conditionalBottomReturnNegative :: forall context.
        (CFGEdgeComputationFunctionConstraints context)
     => CFGEdgeComputationFunction context
 conditionalBottomReturnNegative n1 n0 = do
-  (CFGNode (ExitClause x x' cls) _) <- Just n1
-  Clause x2 (ConditionalBody x1 p _ (FunctionValue _ e)) <- Just cls
+  (CFGNode (ExitClause x x' cls) _) <- [n1]
+  Clause x2 (ConditionalBody x1 p _ (FunctionValue _ e)) <- [cls]
   guard $ x' == retv e
   pure $ intensional Ord do
     stackElement <- pop
@@ -267,8 +269,8 @@ conditionalTopNonSubjectVariable :: forall context.
        (CFGEdgeComputationFunctionConstraints context)
     => CFGEdgeComputationFunction context
 conditionalTopNonSubjectVariable n1 n0 = do
-  (CFGNode (EnterClause x' x1 cls) _) <- Just n1
-  Clause x2 (ConditionalBody _ p _ _) <- Just cls
+  (CFGNode (EnterClause x' x1 cls) _) <- [n1]
+  Clause x2 (ConditionalBody _ p _ _) <- [cls]
   pure $ intensional Ord do
     stackElement <- pop
     case stackElement of
@@ -285,7 +287,7 @@ recordProjectionStart :: forall context.
        (CFGEdgeComputationFunctionConstraints context)
     => CFGEdgeComputationFunction context
 recordProjectionStart n1 n0 = do
-  (CFGNode (UnannotatedClause (Clause x (ProjectionBody x' l))) _) <- Just n1
+  (CFGNode (UnannotatedClause (Clause x (ProjectionBody x' l))) _) <- [n1]
   pure $ intensional Ord do
     stackElement <- pop
     case stackElement of
@@ -337,8 +339,8 @@ filterImmediate :: forall context.
        (CFGEdgeComputationFunctionConstraints context)
     => CFGEdgeComputationFunction context
 filterImmediate n1 n0 = do
-  CFGNode (UnannotatedClause (Clause x (ValueBody v))) _ <- Just n1
-  patsLegal <- immediatelyMatchedBy v
+  CFGNode (UnannotatedClause (Clause x (ValueBody v))) _ <- [n1]
+  patsLegal <- Maybe.maybeToList $ immediatelyMatchedBy v
   pure $ intensional Ord do
     stackElement <- pop
     case stackElement of
@@ -359,8 +361,8 @@ filterRecord :: forall context.
        (CFGEdgeComputationFunctionConstraints context)
     => CFGEdgeComputationFunction context
 filterRecord n1 n0 = do
-  CFGNode (UnannotatedClause (Clause x (ValueBody v))) _ <- Just n1
-  AbsValueRecord r@(RecordValue m) <- Just v
+  CFGNode (UnannotatedClause (Clause x (ValueBody v))) _ <- [n1]
+  AbsValueRecord r@(RecordValue m) <- [v]
   pure $ intensional Ord do
     stackElement <- pop
     case stackElement of
@@ -401,7 +403,7 @@ binaryOperationStart :: forall context.
     => CFGEdgeComputationFunction context
 binaryOperationStart n1 n0 = do
   CFGNode (UnannotatedClause
-              (Clause x1 (BinaryOperationBody x2 _ x3))) _ <- Just n1
+              (Clause x1 (BinaryOperationBody x2 _ x3))) _ <- [n1]
   pure $ intensional Ord do
     stackElement <- pop
     case stackElement of
@@ -424,7 +426,7 @@ binaryOperationEvaluation :: forall context.
     => CFGEdgeComputationFunction context
 binaryOperationEvaluation n1 n0 = do
   CFGNode (UnannotatedClause
-              (Clause x1 (BinaryOperationBody x2 op x3))) _ <- Just n1
+              (Clause x1 (BinaryOperationBody x2 op x3))) _ <- [n1]
   pure $ intensional Ord do
     stackElement1 <- pop
     case stackElement1 of
@@ -440,18 +442,21 @@ binaryOperationEvaluation n1 n0 = do
                   ContinuationValue (AbsFilteredVal v1 patsp' patsn') ->
                     intensional Ord do
                       itsGuard %$ Set.null patsp' && Set.null patsn'
-                      resultValues <- abstractBinaryOperation op v1 v2
+                      resultValues <- pdrmMaybe $
+                                        abstractBinaryOperation op v1 v2
                       stackElement4 <- pop
                       case stackElement4 of
                         LookupVar xlookup patsplookup patsnlookup ->
                           intensional Ord do
                             itsGuard %$ x1 == xlookup
-                            immediatePatterns <- immediatelyMatchedBy resultValue
+                            resultValue <- pdrmChoose resultValues
+                            immediatePatterns <- pdrmMaybe $
+                                                immediatelyMatchedBy resultValue
                             itsGuard %$ patsp `Set.isSubsetOf` immediatePatterns
-                                     && Set.disjoint immediatePatterns patsn
+                                    && Set.disjoint immediatePatterns patsn
                             itsPure %@ ( Path [Push $ ContinuationValue $
-                                                  AbsFilteredVal resultValue
-                                                      Set.empty Set.empty]
+                                                AbsFilteredVal resultValue
+                                                    Set.empty Set.empty]
                                        , ProgramPointState n1
                                        )
                         _ -> itsMzero
@@ -464,7 +469,7 @@ unaryOperationStart :: forall context.
     => CFGEdgeComputationFunction context
 unaryOperationStart n1 n0 = do
   CFGNode (UnannotatedClause
-              (Clause x1 (UnaryOperationBody _ x2))) _ <- Just n1
+              (Clause x1 (UnaryOperationBody _ x2))) _ <- [n1]
   pure $ intensional Ord do
     stackElement <- pop
     case stackElement of
@@ -484,7 +489,7 @@ unaryOperationEvaluation :: forall context.
     => CFGEdgeComputationFunction context
 unaryOperationEvaluation n1 n0 = do
   CFGNode (UnannotatedClause
-              (Clause x1 (UnaryOperationBody op x2))) _ <- Just n1
+              (Clause x1 (UnaryOperationBody op x2))) _ <- [n1]
   pure $ intensional Ord do
     stackElement1 <- pop
     case stackElement1 of
@@ -495,13 +500,15 @@ unaryOperationEvaluation n1 n0 = do
             ContinuationValue (AbsFilteredVal v patsp patsn) ->
               intensional Ord do
                 itsGuard %$ Set.null patsp && Set.null patsn
-                resultValues <- abstractUnaryOperation op v
+                resultValues <- pdrmMaybe $ abstractUnaryOperation op v
                 stackElement3 <- pop
                 case stackElement3 of
                   LookupVar xlookup patsplookup patsnlookup ->
                     intensional Ord do
                       itsGuard %$ x1 == xlookup
-                      immediatePatterns <- immediatelyMatchedBy resultValue
+                      resultValue <- pdrmChoose resultValues
+                      immediatePatterns <- pdrmMaybe $
+                                            immediatelyMatchedBy resultValue
                       itsGuard %$ patsp `Set.isSubsetOf` immediatePatterns
                                && Set.disjoint immediatePatterns patsn
                       itsPure %@ ( Path [Push $ ContinuationValue $
@@ -552,8 +559,9 @@ computationForEdge (CFGEdge n1 n0) =
               ]
   in
   rules
-  & Maybe.mapMaybe
+  & List.map
       (\rule ->
-        let maybeComputation = rule n1 n0 in
-        fmap (ProgramPointState n0,) maybeComputation
+        let computations = rule n1 n0 in
+        fmap (ProgramPointState n0,) computations
       )
+  & List.concat

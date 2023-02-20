@@ -16,6 +16,8 @@ module PdsReachability
 , R.closureStep
 , R.isClosed
 , R.pop
+, R.pdrmMaybe
+, R.pdrmChoose
 -- TODO: more
 ) where
 
