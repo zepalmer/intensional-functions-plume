@@ -345,16 +345,15 @@ instance (Typeable spec) => IntensionalMonadPlus (PDRM spec) where
   itsMzero = PDRM $ itsMzero
   itsMplus = \%%Ord (PDRM a) (PDRM b) -> PDRM $ itsMplus %@% (a, b)
 
-pop :: forall spec itsM.
+pop :: forall spec.
        ( Spec spec
-       , itsM ~ PDRM spec
-       , IntensionalMonad itsM
-       , IntensionalApplicativePureC itsM (Element spec)
-       , IntensionalMonadBindC itsM (InternalNode spec) (Element spec)
+       , IntensionalMonad (PDRM spec)
+       , IntensionalApplicativePureC (PDRM spec) (Element spec)
+       , IntensionalMonadBindC (PDRM spec) (InternalNode spec) (Element spec)
        , IntensionalMonadBindC
-          itsM (InternalNode spec, Element spec) (Element spec)
-       , IntensionalMonadBindC itsM () (Element spec)
-       , (IntensionalFunctorCF itsM) (itsM (Element spec))
+          (PDRM spec) (InternalNode spec, Element spec) (Element spec)
+       , IntensionalMonadBindC (PDRM spec) () (Element spec)
+       , (IntensionalFunctorCF (PDRM spec)) (PDRM spec (Element spec))
        )
     => PDRM spec (Element spec)
 pop = PDRM $ intensional Ord do
@@ -401,9 +400,33 @@ addPathComputation source pdrComputation analysis =
   analysis & updateEngine (addComputation computation)
 
 -- USER
+addManyPathComputation ::
+     forall spec.
+     (Spec spec, Ord (Path spec))
+  => (Node spec ->%Ord PDRM spec (Path spec, Node spec)) -> Analysis spec
+  -> Analysis spec
+addManyPathComputation pdrComputationFunction analysis =
+  let computation =
+        intensional Ord do
+          node <- ICE.getIndexedFact indexActiveNode ()
+          case node of
+            UserNode source -> intensional Ord do
+                let PDRM innerComputations = pdrComputationFunction %@ source
+                computationsWithResults <-
+                    runListT $ ((runStateT $ innerComputations) %@ node)
+                factSets <- imListToList %$ itsFmap %@% (
+                    \%Ord ((path, destination), currentNode) ->
+                        pathToFacts currentNode path (UserNode destination)
+                    , computationsWithResults )
+                itsPure %@ List.foldr Set.union Set.empty factSets
+            IntermediateNode {} -> itsPure %@ Set.empty
+  in
+  analysis & updateEngine (addComputation computation)
+
+-- USER
 addEdgeFunction :: forall spec. (Spec spec)
                 => Maybe (Node spec ->%Ord Bool)
-                -> (Node spec ->%Ord (Path spec, Node spec))
+                -> (Node spec ->%Ord [(Path spec, Node spec)])
                 -> Analysis spec
                 -> Analysis spec
 addEdgeFunction maybeNodeFilter edgeFunction analysis =
@@ -431,8 +454,14 @@ addEdgeFunction maybeNodeFilter edgeFunction analysis =
         intensional Ord do
           node <- ICE.getIndexedFact nodeIndex ()
           () <- ICE.getIndexedFact indexIsActiveNode (UserNode node)
-          let (path, dest) = edgeFunction %@ node
-          let facts = pathToFacts (UserNode node) path (UserNode dest)
+          let results = edgeFunction %@ node
+          let facts =
+                results
+                & List.map
+                    (\(path, dest) ->
+                        pathToFacts (UserNode node) path (UserNode dest)
+                    )
+                & List.foldr Set.union Set.empty
           itsPure %@ facts
   in
   analysis' & updateEngine (addComputation computation)

@@ -14,6 +14,7 @@ import AST.AstUtils
 import qualified Closure.Intensional.Indexed.Engine as ICE
 import qualified PlumeAnalysis.Context as C
 import qualified PdsReachability
+import qualified PdsReachability.Reachability
 import PlumeAnalysis.Pds.PlumePdsComputations
 import PlumeAnalysis.Pds.PlumePdsStructureTypes
 import PlumeAnalysis.PlumeSpecification
@@ -281,6 +282,41 @@ abstractEvaluationRules =
       )
     ]
 
+{-| A helper routine to produce PDS computations for each CFG edge fact.  We
+    must use this function each time a new CFG edge appears to keep the PDS
+    in sync.
+-}
+updatePdsWithComputationsFromEdgeFacts :: forall context.
+    (C.Context context, Typeable context)
+ => Set (PlumeFact context)
+ -> PdsReachability.Analysis (PlumePds context)
+ -> PdsReachability.Analysis (PlumePds context)
+updatePdsWithComputationsFromEdgeFacts newFacts pds =
+  let newPdsComputations :: [( PdsState context
+                             , PdsReachability.PDRM (PlumePds context)
+                                ( PdsReachability.Path (PlumePds context)
+                                , PdsState context
+                                )
+                             )
+                            ]
+      newPdsComputations =
+        List.concatMap
+          (\fact ->
+            case fact of
+              CFGEdgeFact edge -> computationsForEdge edge
+              _ -> []
+          )
+          (Set.toList newFacts)
+  in
+  let pds' =
+        List.foldl
+          (\pds'' (startNode,pathComputation) ->
+            PdsReachability.addPathComputation startNode pathComputation pds''
+          )
+          pds newPdsComputations
+  in
+  pds'
+
 {-| Creates an initial, empty analysis of the provided concrete expression.  An
     empty context model of the expected type to use must be provided as the
     first argument.
@@ -298,8 +334,14 @@ createInitialAnalysis emptyCtx expr =
         & flip (++) [CFGNode (EndClause rx) emptyCtx]
   in
   let edges = edgesFromNodeList nodes in
+  let initialFacts = List.map CFGEdgeFact $ Set.toList edges in
+  let initialPds =
+        updatePdsWithComputationsFromEdgeFacts
+            (Set.fromList initialFacts)
+            PdsReachability.emptyAnalysis
+  in
   updatePlumeEngine
-    ( addFacts (List.map CFGEdgeFact $ Set.toList edges)
+    ( addFacts initialFacts
     . addIndex indexPredecessors
     . addIndex indexSuccessors
     . addIndex indexAllEdges
@@ -325,7 +367,7 @@ createInitialAnalysis emptyCtx expr =
     -- Now add computations for the abstract evaluation rules.
     . addComputations abstractEvaluationRules
     )
-    ( PlumeAnalysis { pdsEngine = PdsReachability.emptyAnalysis
+    ( PlumeAnalysis { pdsEngine = initialPds
                     , plumeEngine = ICE.emptyEngine
                     , plumeExpression = expr
                     }
@@ -439,22 +481,8 @@ cfgClosureStep analysis =
   -- later lookup operations behave correctly.  We translate each CFG edge
   -- into a computation to be entered into the PDS.  Other Plume facts (such as
   -- lookup results or CFG nodes) do not have direct bearing on the PDS.
-  let newPdsComputations :: [( PdsState context
-                             , PdsReachability.PDRM (PlumePds context)
-                                ( PdsReachability.Path (PlumePds context)
-                                , PdsState context
-                                )
-                             )
-                            ]
-      newPdsComputations =
-        List.concatMap
-          (\fact ->
-            case fact of
-              CFGEdgeFact edge -> computationForEdge edge
-              _ -> []
-          )
-          (Set.toList newFacts)
-  in
+  let pds = pdsEngine analysis in
+  let pds' = updatePdsWithComputationsFromEdgeFacts newFacts pds in
   let newPdsLookups :: [Lookup context]
       newPdsLookups =
         Maybe.mapMaybe
@@ -464,13 +492,6 @@ cfgClosureStep analysis =
               _ -> Nothing
           )
           (Set.toList newFacts)
-  in
-  let pds' =
-        List.foldl
-          (\pds (startNode,pathComputation) ->
-            PdsReachability.addPathComputation startNode pathComputation pds
-          )
-          (pdsEngine analysis) newPdsComputations
   in
   let analysis' =
         analysis
@@ -510,8 +531,10 @@ performFullClosure ::
     (C.Context context, Typeable context)
  => PlumeAnalysis context -> PlumeAnalysis context
 performFullClosure analysis =
-  if isClosed analysis then analysis
-  else performFullClosure $ performClosureStep analysis
+  if isClosed analysis then
+    analysis
+  else
+    performFullClosure $ performClosureStep analysis
 
 {-| Queries a Plume analysis for the values of a variable at a given point,
     within a particular context, and using the given sets of positive and

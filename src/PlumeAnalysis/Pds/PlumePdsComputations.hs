@@ -2,8 +2,10 @@
 {-# LANGUAGE TupleSections #-}
 
 module PlumeAnalysis.Pds.PlumePdsComputations
-( computationForEdge
+( computationsForEdge
 ) where
+
+import System.IO.Unsafe
 
 import AST.AbstractAst
 import AST.Ast
@@ -522,7 +524,7 @@ unaryOperationEvaluation n1 n0 = do
 
 -- Aggregate computations ------------------------------------------------------
 
-computationForEdge :: forall context.
+computationsForEdge :: forall context.
        (CFGEdgeComputationFunctionConstraints context)
     => CFGEdge context
     -> [( PdsState context
@@ -532,8 +534,7 @@ computationForEdge :: forall context.
           )
         )
        ]
-computationForEdge (CFGEdge n1 n0) =
-  -- TODO: remaining rules
+computationsForEdge (CFGEdge n1 n0) =
   let rules = [ discoveredOrIntermediateValue
               , alias
               , skip

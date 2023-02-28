@@ -51,9 +51,19 @@ executables:
     dependencies:
     - intensional-functions-plume
 
+  sandbox-exe:
+    main:                Main.hs
+    source-dirs:         sandbox
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - intensional-functions-plume
+
 tests:
   intensional-functions-plume-test:
-    main:                Spec.hs
+    main:                Main.hs
     source-dirs:         test
     ghc-options:
     - -threaded

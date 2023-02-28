@@ -1,26 +1,20 @@
 {-# LANGUAGE IntensionalFunctions #-}
 {-# LANGUAGE TypeFamilies #-}
 
-module PrimeTest where
-
-import Test.Tasty
-import Test.Tasty.HUnit
+module Main where
 
 import Control.Intensional.Applicative
+import Control.Intensional.Monad.Identity
 import Control.Intensional.MonadPlus
 import Control.Intensional.Runtime
 import qualified Data.List as List
 import qualified Data.Set as Set
 import Data.Function
 
+import qualified Closure.Intensional.Indexed.Engine as ICE
 import PdsReachability.Reachability
 import PdsReachability.Specification
 import PdsReachability.UserDataTypes
-
-tests :: TestTree
-tests =
-  testGroup "Prime test"
-  [primeTest]
 
 data PrimeTest
 
@@ -36,6 +30,9 @@ data StackElm
 
 type instance Node PrimeTest = State
 type instance Element PrimeTest = StackElm
+
+allFactsIndex :: a ->%Ord Maybe ((),a)
+allFactsIndex = \%Ord x -> Just ((),x)
 
 isPrime :: Int -> Bool
 isPrime n =
@@ -82,6 +79,42 @@ primeFactorCountTest =
     Just res -> res
     Nothing -> []
 
-primeTest :: TestTree
-primeTest =
-  testCase "Prime test" (assertEqual "state check" [Count 3] primeFactorCountTest)
+newtype PWrapNode = PWrapNode (InternalNode PrimeTest)
+    deriving (Eq, Ord)
+newtype PWrapFact = PWrapFact (Fact PrimeTest)
+    deriving (Eq, Ord)
+
+instance Show PWrapNode where
+    show (PWrapNode node) =
+        case node of
+            UserNode (Number n) -> "Num " ++ show n
+            UserNode (Count n) -> "Count " ++ show n
+            IntermediateNode actions node ->
+                "(" ++ show actions ++ " => " ++ show node ++ ")"
+
+instance Show PWrapFact where
+    show (PWrapFact fact) =
+        case fact of
+            EdgeFact source action dest ->
+                show source ++ " --- " ++ show action ++ " --> " ++ show dest
+            NodeFact node ->
+                show $ PWrapNode node
+            ActiveFact node ->
+                (show $ PWrapNode node) ++ " is active"
+
+main :: IO ()
+main = do
+    putStrLn "-----------------------------------------"
+    print $ primeFactorCountTest
+    putStrLn "~~~~"
+    let IntensionalIdentity closureEngine = ICE.close $ ICE.addIndex allFactsIndex $ analysisEngine primeFactorCountAnalysis
+    let allFacts = Set.map PWrapFact $ ICE.getAllIndexedFacts allFactsIndex () closureEngine
+    putStrLn $ allFacts
+             & Set.toList
+             & List.foldl
+                (\a e ->
+                    a ++ (if a == "" then "" else "\n") ++
+                    show e
+                )
+                ""
+    pure ()
