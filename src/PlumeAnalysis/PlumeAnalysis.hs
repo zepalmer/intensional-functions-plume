@@ -8,6 +8,8 @@
 
 module PlumeAnalysis.PlumeAnalysis where
 
+import System.IO.Unsafe -- TODO: remove
+
 import AST.AbstractAst
 import AST.Ast
 import AST.AstUtils
@@ -334,20 +336,22 @@ createInitialAnalysis emptyCtx expr =
         & flip (++) [CFGNode (EndClause rx) emptyCtx]
   in
   let edges = edgesFromNodeList nodes in
-  let initialFacts = List.map CFGEdgeFact $ Set.toList edges in
+  let initialEdgeFacts = List.map CFGEdgeFact $ Set.toList edges in
   let initialPds =
         updatePdsWithComputationsFromEdgeFacts
-            (Set.fromList initialFacts)
+            (Set.fromList initialEdgeFacts)
             PdsReachability.emptyAnalysis
   in
   updatePlumeEngine
-    ( addFacts initialFacts
+    ( addFacts initialEdgeFacts
+    . addFacts [CFGNodeActiveFact (CFGNode (StartClause rx) emptyCtx)]
     . addIndex indexPredecessors
     . addIndex indexSuccessors
     . addIndex indexAllEdges
     . addIndex indexAllActiveNodes
     . addIndex indexIsActiveNode
     . addIndex indexLookupResultsByLookup
+    . addIndex indexLookupResultExists
     . addIndex indexAllCallSites
     . addIndex indexAllConditionalSites
     -- If an edge exists between two nodes, then those nodes exist.
@@ -357,12 +361,16 @@ createInitialAnalysis emptyCtx expr =
         itsPure %$ Set.fromList [CFGNodeFact src, CFGNodeFact dst]
       )
     -- If an edge exists and its source node is active, then its target node is
-    -- active.
+    -- active.  This only applies to non-application clauses.
     . addComputation
       (intensional Ord do
         node <- ICE.getIndexedFact indexAllActiveNodes ()
-        dst <- ICE.getIndexedFact indexSuccessors node
-        itsPure %$ Set.singleton (CFGNodeActiveFact dst)
+        case node of
+          CFGNode (UnannotatedClause (Clause _ (ApplBody _ _ _))) _ ->
+            itsPure %$ Set.empty
+          _ -> intensional Ord do
+            dst <- ICE.getIndexedFact indexSuccessors node
+            itsPure %$ Set.singleton (CFGNodeActiveFact dst)
       )
     -- Now add computations for the abstract evaluation rules.
     . addComputations abstractEvaluationRules
