@@ -5,14 +5,12 @@ module PlumeAnalysis.Pds.PlumePdsComputations
 ( computationsForEdge
 ) where
 
-import System.IO.Unsafe
-
 import AST.AbstractAst
 import AST.Ast
 import AST.AstUtils
 import qualified PlumeAnalysis.Context as C
 import qualified PdsReachability
-import PdsReachability (pop, pdrmMaybe, pdrmChoose, Path(..), StackAction(..))
+import PdsReachability (pop, pdrmMaybe, pdrmChoose, Element, Path(..), StackAction(..))
 import PlumeAnalysis.Pds.PlumePdsStructureTypes
 import PlumeAnalysis.PlumeSpecification
 import PlumeAnalysis.Types.PlumeGraph
@@ -25,6 +23,7 @@ import Control.Intensional.Applicative
 import Control.Intensional.Monad
 import Control.Intensional.MonadPlus
 import Control.Intensional.Runtime
+import Control.Intensional.Runtime.NonEmptyHList
 import Control.Monad
 import Data.Function ((&))
 import qualified Data.List as List
@@ -118,6 +117,30 @@ jump _ _ =
       Jump node -> itsPure %@ ( Path [], ProgramPointState node )
       _ -> itsMzero
 
+doCapture :: forall context.
+             (Typeable context, Ord context, Show context)
+          => '[ CFGNode context
+              , PdsContinuation context
+              , Int
+              , [PdsContinuation context]
+              ]
+     ->%%Ord CFGEdgeComputation context
+doCapture = \%%Ord n0 capturedElement k elements ->
+    if k == 0 then
+      itsPure %$ ( Path $ map Push $
+                    reverse elements ++ [capturedElement]
+                 , ProgramPointState n0 )
+    else
+      intensional Ord do
+        stackElement <- pop
+        -- TODO: use this once we have added support for longer tuple application
+        --(doCapture @context) %@% (n0, capturedElement, k-1, stackElement:elements)
+        doCapture %@+
+            (NonEmptyHListCons n0 $
+             NonEmptyHListCons capturedElement $
+             NonEmptyHListCons (k-1) $
+             NonEmptyHListSingleton (stackElement:elements))
+
 capture :: forall context.
        (CFGEdgeComputationFunctionConstraints context)
     => CFGEdgeComputationFunction context
@@ -126,20 +149,14 @@ capture _ n0 =
     stackElement <- pop
     stackElement' <- pop
     case stackElement' of
-      Capture (CaptureSize n) ->
-        let doCapture :: Int ->%Ord [PdsContinuation context]
-                      ->%Ord CFGEdgeComputation context
-            doCapture = \%Ord k elements ->
-              if k == 0 then
-                itsPure %$ ( Path $ map Push $
-                                reverse elements ++ [stackElement]
-                           , ProgramPointState n0 )
-              else
-                intensional Ord do
-                  stackElement'' <- pop
-                  doCapture %@ (k-1) %@ (stackElement'':elements)
-        in
-        doCapture %@ n %@ []
+      Capture (CaptureSize captureSize) ->
+        -- TODO: use this once we have added support for longer tuple application
+        --(doCapture @context) %@% (n0, stackElement, captureSize, [])
+        doCapture %@+
+            (NonEmptyHListCons n0 $
+             NonEmptyHListCons stackElement $
+             NonEmptyHListCons captureSize $
+             NonEmptyHListSingleton [])
       _ -> itsMzero
 
 -- Function wiring -------------------------------------------------------------
@@ -495,7 +512,7 @@ unaryOperationEvaluation n1 n0 = do
   pure $ intensional Ord do
     stackElement1 <- pop
     case stackElement1 of
-      BinaryOperation ->
+      UnaryOperation ->
         intensional Ord do
           stackElement2 <- pop
           case stackElement2 of

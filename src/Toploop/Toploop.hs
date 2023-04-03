@@ -3,8 +3,6 @@
 
 module Toploop.Toploop where
 
-import GHC.IO.Unsafe
-
 import AST.AbstractAst
 import AST.Ast
 import AST.AstUtils
