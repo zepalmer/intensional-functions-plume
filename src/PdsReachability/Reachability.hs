@@ -10,6 +10,8 @@
 
 module PdsReachability.Reachability where
 
+import GHC.IO.Unsafe
+
 import AST.Ast
 import Control.Intensional.Alternative
 import Control.Intensional.Applicative
@@ -537,6 +539,12 @@ closureStep analysis =
             )
         & Set.fromList
   in
+-- TODO: remove
+--   unsafePerformIO
+--     ( do
+--         print $ ICE.getAllFacts engine'
+--         pure $ \x -> x
+--     )
   (analysis { analysisEngine = engine' }, newAnswers)
 
 -- USER

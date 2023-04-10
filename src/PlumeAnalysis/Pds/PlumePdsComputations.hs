@@ -128,7 +128,8 @@ doCapture :: forall context.
 doCapture = \%%Ord n0 capturedElement k elements ->
     if k == 0 then
       itsPure %$ ( Path $ map Push $
-                    reverse elements ++ [capturedElement]
+                    -- reverse elements ++ [capturedElement]
+                    capturedElement : elements
                  , ProgramPointState n0 )
     else
       intensional Ord do
