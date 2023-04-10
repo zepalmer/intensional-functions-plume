@@ -188,8 +188,8 @@ ruleFunctionEnterNonLocal n1 n0 = do
       LookupVar xlookup patsp patsn ->
         intensional Ord do
           () <- itsGuard %$ xlookup /= x
-          itsPure %@ ( Path [ Push $ LookupVar xf Set.empty Set.empty
-                            , Push $ LookupVar xlookup patsp patsn
+          itsPure %@ ( Path [ Push $ LookupVar xlookup patsp patsn
+                            , Push $ LookupVar xf Set.empty Set.empty
                             ]
                      , ProgramPointState n1 )
       _ -> itsMzero
@@ -258,9 +258,9 @@ conditionalBottomReturnPositive n1 n0 = do
       LookupVar xlookup patsp patsn ->
         intensional Ord do
           itsGuard %$ xlookup == x
-          itsPure %@ ( Path [ Push $ LookupVar x1 (Set.singleton p) Set.empty
+          itsPure %@ ( Path [ Push $ LookupVar x' patsp patsn
                             , Push $ Jump n1
-                            , Push $ LookupVar x' patsp patsn
+                            , Push $ LookupVar x1 (Set.singleton p) Set.empty
                             ]
                      , ProgramPointState n1 )
       _ -> itsMzero
@@ -278,9 +278,9 @@ conditionalBottomReturnNegative n1 n0 = do
       LookupVar xlookup patsp patsn ->
         intensional Ord do
           itsGuard %$ xlookup == x
-          itsPure %@ ( Path [ Push $ LookupVar x1 Set.empty (Set.singleton p)
+          itsPure %@ ( Path [ Push $ LookupVar x' patsp patsn
                             , Push $ Jump n1
-                            , Push $ LookupVar x' patsp patsn
+                            , Push $ LookupVar x1 Set.empty (Set.singleton p)
                             ]
                      , ProgramPointState n1 )
       _ -> itsMzero
@@ -314,8 +314,8 @@ recordProjectionStart n1 n0 = do
       LookupVar xlookup patsp patsn ->
         intensional Ord do
           itsGuard %$ xlookup == x
-          itsPure %@ ( Path [ Push $ LookupVar x' Set.empty Set.empty
-                            , Push $ Project l patsp patsn
+          itsPure %@ ( Path [ Push $ Project l patsp patsn
+                            , Push $ LookupVar x' Set.empty Set.empty
                             ]
                      , ProgramPointState n1 )
       _ -> itsMzero
@@ -399,13 +399,13 @@ filterRecord n1 n0 = do
           itsGuard %$ patternSetLabels `Set.isSubsetOf` recordLabels
           let makeK'' l =
                 let x'' = (Map.!) m l in
-                [ Push $ LookupVar x'' (patternSetProjection patsp l)
+                [ Push $ Jump n1
+                , Push $ LookupVar x'' (patternSetProjection patsp l)
                                        (patternSetProjection patsn' l)
-                , Push $ Jump n1
                 ]
           let firstPushes =
-                [ Push $ ContinuationValue $ AbsFilteredVal v patsp patsn'
-                , Push $ Jump n1
+                [ Push $ Jump n1
+                , Push $ ContinuationValue $ AbsFilteredVal v patsp patsn'
                 ]
           let allPushes =
                 recordLabels
