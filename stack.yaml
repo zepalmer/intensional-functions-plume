@@ -3,8 +3,8 @@ resolver: nightly-2022-07-18 # for ghc 9.2
 
 # Using intensional functions GHC
 # NOTE: This should eventually point to a publicly visible repository.
-compiler: ghc-git-cac571902c6c34d6e7aca7f9d52dd63d15e4789d-quick
-compiler-repository: git.bahj.com:intensional-functions-ghc
+compiler: ghc-git-d1f7b343f781cfaf56a5a2807de556219da1eb6a-quick
+compiler-repository: https://github.com/zepalmer/intensional-functions-ghc.git
 
 # User packages to be built.
 packages:
@@ -12,8 +12,8 @@ packages:
 
 # Dependency packages to be pulled from upstream that are not in the resolver.
 extra-deps:
-  - git: git.bahj.com:intensional-functions-lib
-    commit: d5f9799a657a266d732f4ee94472009b34553a16
+  - git: https://github.com/zepalmer/intensional-functions-lib.git
+    commit: 74db3a67cb65661d75f59af3c7d6233faab11514
   - git: git.bahj.com:intensional-functions-closure-engine
-    commit: c2d6ed3854e61ce219f5edd73867db51bbc95687
+    commit: 894f8979bd87a179fe088f11ac4b490fa615a7a0
   - dequeue-0.1.12@sha256:547c2a71819dca0ae1bf7c15fb290b39f80d5d9a6f9985a06a1cb8645b578df2,855
