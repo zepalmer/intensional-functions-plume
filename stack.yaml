@@ -3,7 +3,7 @@ resolver: nightly-2022-07-18 # for ghc 9.2
 
 # Using intensional functions GHC
 # NOTE: This should eventually point to a publicly visible repository.
-compiler: ghc-git-d1f7b343f781cfaf56a5a2807de556219da1eb6a-quick
+compiler: ghc-git-2ec8e0ddb0cf3efb11105b19364f2bc745edc84a-quick
 compiler-repository: https://github.com/zepalmer/intensional-functions-ghc.git
 
 # User packages to be built.
