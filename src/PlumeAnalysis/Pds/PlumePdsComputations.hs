@@ -387,13 +387,13 @@ filterRecord n1 n0 = do
           itsGuard %$ patternSetLabels `Set.isSubsetOf` recordLabels
           let makeK'' l =
                 let x'' = (Map.!) m l in
-                [ Push $ Jump n1
-                , Push $ LookupVar x'' (patternSetProjection patsp l)
+                [ Push $ LookupVar x'' (patternSetProjection patsp l)
                                        (patternSetProjection patsn' l)
+                , Push $ Jump n1
                 ]
           let firstPushes =
-                [ Push $ Jump n1
-                , Push $ ContinuationValue $ AbsFilteredVal v patsp patsn'
+                [ Push $ ContinuationValue $ AbsFilteredVal v patsp patsn'
+                , Push $ Jump n1
                 ]
           let allPushes =
                 recordLabels
