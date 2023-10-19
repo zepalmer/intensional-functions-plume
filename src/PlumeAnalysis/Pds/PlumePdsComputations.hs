@@ -1,5 +1,6 @@
 {-# LANGUAGE IntensionalFunctions #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE TypeApplications #-}
 
 module PlumeAnalysis.Pds.PlumePdsComputations
 ( computationsForEdge
@@ -128,19 +129,12 @@ doCapture :: forall context.
 doCapture = \%%Ord n0 capturedElement k elements ->
     if k == 0 then
       itsPure %$ ( Path $ map Push $
-                    -- reverse elements ++ [capturedElement]
                     capturedElement : elements
                  , ProgramPointState n0 )
     else
       intensional Ord do
         stackElement <- pop
-        -- TODO: use this once we have added support for longer tuple application
-        --(doCapture @context) %@% (n0, capturedElement, k-1, stackElement:elements)
-        doCapture %@+
-            (NonEmptyHListCons n0 $
-             NonEmptyHListCons capturedElement $
-             NonEmptyHListCons (k-1) $
-             NonEmptyHListSingleton (stackElement:elements))
+        doCapture %@% (n0, capturedElement, (k-1), (stackElement:elements))
 
 capture :: forall context.
        (CFGEdgeComputationFunctionConstraints context)
@@ -151,13 +145,7 @@ capture _ n0 =
     stackElement' <- pop
     case stackElement' of
       Capture (CaptureSize captureSize) ->
-        -- TODO: use this once we have added support for longer tuple application
-        --(doCapture @context) %@% (n0, stackElement, captureSize, [])
-        doCapture %@+
-            (NonEmptyHListCons n0 $
-             NonEmptyHListCons stackElement $
-             NonEmptyHListCons captureSize $
-             NonEmptyHListSingleton [])
+        doCapture %@% (n0, stackElement, captureSize, [])
       _ -> itsMzero
 
 -- Function wiring -------------------------------------------------------------
