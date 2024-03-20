@@ -460,8 +460,9 @@ binaryOperationEvaluation n1 n0 = do
                             resultValue <- pdrmChoose resultValues
                             immediatePatterns <- pdrmMaybe $
                                                 immediatelyMatchedBy resultValue
-                            itsGuard %$ patsp `Set.isSubsetOf` immediatePatterns
-                                    && Set.disjoint immediatePatterns patsn
+                            itsGuard %$
+                              patsplookup `Set.isSubsetOf` immediatePatterns &&
+                              Set.disjoint immediatePatterns patsnlookup
                             itsPure %@ ( Path [Push $ ContinuationValue $
                                                 AbsFilteredVal resultValue
                                                     Set.empty Set.empty]
@@ -517,8 +518,9 @@ unaryOperationEvaluation n1 n0 = do
                       resultValue <- pdrmChoose resultValues
                       immediatePatterns <- pdrmMaybe $
                                             immediatelyMatchedBy resultValue
-                      itsGuard %$ patsp `Set.isSubsetOf` immediatePatterns
-                               && Set.disjoint immediatePatterns patsn
+                      itsGuard %$
+                        patsplookup `Set.isSubsetOf` immediatePatterns &&
+                        Set.disjoint immediatePatterns patsnlookup
                       itsPure %@ ( Path [Push $ ContinuationValue $
                                             AbsFilteredVal resultValue
                                                 Set.empty Set.empty]
