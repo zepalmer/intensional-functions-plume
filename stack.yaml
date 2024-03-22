@@ -11,8 +11,8 @@ packages:
 
 # Dependency packages to be pulled from upstream that are not in the resolver.
 extra-deps:
-  - git: https://github.com/zepalmer/intensional-functions-lib.git
+  - git: git@github.com:zepalmer/intensional-functions-lib.git
     commit: 3ed99513f26b6c8feec6bc6b57e9544a636ff759
-  - git: git@github.com:zepalmer/intensional-functions-closure-engine.git
-    commit: fc7587206ac05f154e748b7647c21278109cd54d
+  - git: git@github.com:zepalmer/intensional-functions-closure-engine
+    commit: 6a75e1582b7dfd1ab354eada68fc81529dd5965f
   - dequeue-0.1.12@sha256:547c2a71819dca0ae1bf7c15fb290b39f80d5d9a6f9985a06a1cb8645b578df2,855
